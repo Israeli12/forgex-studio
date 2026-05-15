@@ -1,10 +1,12 @@
 import React from "react";
-import { Routes, Route, Navigate, Link } from "react-router-dom";
+import { Routes, Route, Navigate, Link, useLocation } from "react-router-dom";
 import { Sidebar } from "@/components/layout/Sidebar";
-import { Bell, Search, Menu } from "lucide-react";
+import { Bell, Search, Menu, LayoutDashboard, Database, CreditCard, Settings as SettingsIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { cn } from "@/lib/utils";
+import { AuthProvider, useAuth } from "@/lib/auth";
 import ProjectsList from "@/pages/projects/ProjectsList";
 import NewProject from "@/pages/projects/NewProject";
 import ProjectDetail from "@/pages/projects/ProjectDetail";
@@ -13,6 +15,58 @@ import BillingPage from "@/pages/billing/BillingPage";
 import GithubSettings from "@/pages/settings/GithubSettings";
 import ApiKeysSettings from "@/pages/settings/ApiKeysSettings";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
+import Login from "@/pages/auth/Login";
+import Signup from "@/pages/auth/Signup";
+
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+  
+  if (loading) return (
+    <div className="flex h-screen items-center justify-center bg-[#050505]">
+      <div className="h-8 w-8 animate-spin rounded-none border-2 border-[#F27D26] border-t-transparent" />
+    </div>
+  );
+  
+  if (!user) return <Navigate to="/login" replace />;
+  
+  return <>{children}</>;
+}
+
+function FloatingNavbar() {
+  const location = useLocation();
+  const navItems = [
+    { icon: LayoutDashboard, href: "/dashboard", label: "Home" },
+    { icon: Database, href: "/projects", label: "Nodes" },
+    { icon: CreditCard, href: "/billing", label: "Nexus" },
+    { icon: SettingsIcon, href: "/settings", label: "Core" },
+  ];
+
+  return (
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 md:hidden w-[90%] max-w-[400px]">
+      <div className="bg-[#0A0A0A]/80 backdrop-blur-xl border border-white/10 p-2 flex items-center justify-around shadow-2xl shadow-[#F27D26]/10">
+        {navItems.map((item) => {
+          const isActive = location.pathname === item.href;
+          return (
+            <Link
+              key={item.href}
+              to={item.href}
+              className={cn(
+                "flex flex-col items-center gap-1 p-2 transition-all min-w-[64px]",
+                isActive ? "text-[#F27D26]" : "text-white/40"
+              )}
+            >
+              <item.icon size={18} strokeWidth={3} />
+              <span className="text-[8px] font-black uppercase tracking-widest">{item.label}</span>
+              {isActive && (
+                <div className="absolute -bottom-1 w-1 h-1 bg-[#F27D26]" />
+              )}
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function Topbar() {
   const [open, setOpen] = React.useState(false);
@@ -60,11 +114,12 @@ function Layout({ children }: { children: React.ReactNode }) {
       <div className="hidden border-r border-white/10 md:block md:w-64">
         <Sidebar />
       </div>
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex flex-1 flex-col overflow-hidden relative">
         <Topbar />
-        <main className="flex-1 overflow-y-auto p-6 md:p-12 text-[#F5F5F5] selection:bg-[#F27D26] selection:text-black">
+        <main className="flex-1 overflow-y-auto p-6 md:p-12 text-[#F5F5F5] selection:bg-[#F27D26] selection:text-black pb-32 md:pb-12">
           {children}
         </main>
+        <FloatingNavbar />
       </div>
     </div>
   );
@@ -115,19 +170,27 @@ const Dashboard = () => (
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      <Route path="/dashboard" element={<Layout><Dashboard /></Layout>} />
-      <Route path="/projects" element={<Layout><ProjectsList /></Layout>} />
-      <Route path="/projects/new" element={<Layout><NewProject /></Layout>} />
-      <Route path="/projects/:id" element={<Layout><ProjectDetail /></Layout>} />
-      <Route path="/projects/:id/builds/:buildId" element={<Layout><BuildDetail /></Layout>} />
-      <Route path="/billing" element={<Layout><BillingPage /></Layout>} />
-      <Route path="/settings" element={<Layout><div>General Settings (Profile, Notifications)</div></Layout>} />
-      <Route path="/settings/github" element={<Layout><GithubSettings /></Layout>} />
-      <Route path="/settings/api-keys" element={<Layout><ApiKeysSettings /></Layout>} />
-      <Route path="/admin" element={<Layout><AdminDashboard /></Layout>} />
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
-    </Routes>
+    <AuthProvider>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+        
+        <Route path="/" element={<ProtectedRoute><Navigate to="/dashboard" replace /></ProtectedRoute>} />
+        <Route path="/dashboard" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />
+        <Route path="/projects" element={<ProtectedRoute><Layout><ProjectsList /></Layout></ProtectedRoute>} />
+        <Route path="/projects/new" element={<ProtectedRoute><Layout><NewProject /></Layout></ProtectedRoute>} />
+        <Route path="/projects/:id" element={<ProtectedRoute><Layout><ProjectDetail /></Layout></ProtectedRoute>} />
+        <Route path="/projects/:id/builds/:buildId" element={<ProtectedRoute><Layout><BuildDetail /></Layout></ProtectedRoute>} />
+        <Route path="/billing" element={<ProtectedRoute><Layout><BillingPage /></Layout></ProtectedRoute>} />
+        <Route path="/settings" element={<ProtectedRoute><Layout><div>General Settings (Profile, Notifications)</div></Layout></ProtectedRoute>} />
+        <Route path="/settings/github" element={<ProtectedRoute><Layout><GithubSettings /></Layout></ProtectedRoute>} />
+        <Route path="/settings/api-keys" element={<ProtectedRoute><Layout><ApiKeysSettings /></Layout></ProtectedRoute>} />
+        
+        {/* Admin route check is also handled inside AdminDashboard for extra safety, but protected globally here */}
+        <Route path="/admin" element={<ProtectedRoute><Layout><AdminDashboard /></Layout></ProtectedRoute>} />
+        
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+    </AuthProvider>
   );
 }
