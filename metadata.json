@@ -1,0 +1,8 @@
+{
+  "name": "ForgeX Studio",
+  "description": "Cloud-based Android app build platform for Flutter, React Native, and more.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
