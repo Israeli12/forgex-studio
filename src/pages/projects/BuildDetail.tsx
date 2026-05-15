@@ -8,7 +8,8 @@ import {
   CheckCircle2, 
   XCircle, 
   Loader2,
-  Trash2
+  Trash2,
+  Github
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";

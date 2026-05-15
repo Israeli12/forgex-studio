@@ -1,14 +1,122 @@
-import { useState } from "react";
-import { Check, CreditCard, Zap, Shield, HelpCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Check, CreditCard, Zap, Shield, HelpCircle, Smartphone, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { PLAN_LIMITS } from "@/lib/constants";
+import { supabase } from "@/lib/supabase";
+import { cn } from "@/lib/utils";
 
 export default function BillingPage() {
-  const [currentPlan] = useState<'free' | 'pro' | 'team'>('free');
+  const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<any>(null);
+
+  useEffect(() => {
+    async function fetchProfile() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const response = await fetch("/api/user/profile", {
+          headers: {
+            "Authorization": `Bearer ${session?.access_token}`
+          }
+        });
+        const data = await response.json();
+        setProfile(data);
+      } catch (err) {
+        console.error("Profile fetch error:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchProfile();
+  }, []);
+
+  const currentPlan = (profile?.subscription_tier as 'free' | 'pro' | 'team') || 'free';
+  const buildsUsed = profile?.builds_used || 0;
+  const storageUsed = profile?.storage_used || 0;
+
+  const handlePortal = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch("/api/billing/portal", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${session?.access_token}`
+        }
+      });
+      const data = await response.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        toast.info("Initializing Standard Gateway...");
+      }
+    } catch (err) {
+      toast.error("Portal communication failed.");
+    }
+  };
+
+  const handleJulyPay = async (tier: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error("Auth context missing. Re-initialize login.");
+        return;
+      }
+
+      const response = await fetch("/api/billing/julypay/initiate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ tier }),
+      });
+
+      const data = await response.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        toast.error(data.message || "JulyPay Gateway failure.");
+      }
+    } catch (err) {
+      toast.error("Communication error with JulyPay Core.");
+    }
+  };
+
+  const handleUpgrade = async (priceId: string) => {
+    if (!priceId) {
+      toast.error("Vector ID missing. Protocol aborted.");
+      return;
+    }
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error("Auth context missing. Re-initialize login.");
+        return;
+      }
+
+      const response = await fetch("/api/billing/checkout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ priceId }),
+      });
+
+      const data = await response.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        toast.error(data.error || "Gateway failure.");
+      }
+    } catch (err) {
+      toast.error("Communication error with Nexus Core.");
+    }
+  };
 
   const plans = [
     {
@@ -19,6 +127,7 @@ export default function BillingPage() {
       features: ['10 Builds per month', '500 MB Artifact storage', 'APK + AAB builds', 'Standard support'],
       cta: 'Current Plan',
       variant: 'secondary' as const,
+      priceId: '',
     },
     {
       id: 'pro',
@@ -29,6 +138,7 @@ export default function BillingPage() {
       cta: 'Upgrade to Pro',
       variant: 'default' as const,
       popular: true,
+      priceId: (import.meta as any).env.VITE_STRIPE_PRO_PRICE_ID,
     },
     {
       id: 'team',
@@ -38,6 +148,7 @@ export default function BillingPage() {
       features: ['500 Builds per month', '20 GB Artifact storage', 'Team collaboration', 'Shared projects', 'Dedicated support'],
       cta: 'Upgrade to Team',
       variant: 'outline' as const,
+      priceId: (import.meta as any).env.VITE_STRIPE_TEAM_PRICE_ID,
     },
   ];
 
@@ -60,17 +171,17 @@ export default function BillingPage() {
             <div className="space-y-3">
               <div className="flex justify-between text-[10px] font-black uppercase tracking-widest">
                 <span>Build Execution</span>
-                <span className="text-white/40">8 / {PLAN_LIMITS[currentPlan].builds_per_month}</span>
+                <span className="text-white/40">{buildsUsed} / {PLAN_LIMITS[currentPlan].builds_per_month}</span>
               </div>
-              <Progress value={8} max={PLAN_LIMITS[currentPlan].builds_per_month} className="h-1 bg-white/5 rounded-none" />
+              <Progress value={(buildsUsed / PLAN_LIMITS[currentPlan].builds_per_month) * 100} max={100} className="h-1 bg-white/5 rounded-none" />
             </div>
             
             <div className="space-y-3">
               <div className="flex justify-between text-[10px] font-black uppercase tracking-widest">
                 <span>Sector Storage</span>
-                <span className="text-white/40">124 MB / 500 MB</span>
+                <span className="text-white/40">{(storageUsed / (1024 * 1024)).toFixed(1)} MB / {(PLAN_LIMITS[currentPlan].storage_bytes / (1024 * 1024)).toFixed(0)} MB</span>
               </div>
-              <Progress value={24} className="h-1 bg-white/5 rounded-none" />
+              <Progress value={(storageUsed / PLAN_LIMITS[currentPlan].storage_bytes) * 100} max={100} className="h-1 bg-white/5 rounded-none" />
             </div>
           </CardContent>
           <CardFooter className="border-t border-white/5 pt-6 bg-white/[0.01]">
@@ -87,8 +198,16 @@ export default function BillingPage() {
               <CreditCard size={48} strokeWidth={1} />
             </div>
             <div className="space-y-2">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">No Funding Vector Stored</p>
-              <Button variant="link" className="text-[#F27D26] text-[10px] font-black uppercase tracking-widest">Initialize Stripe Gateway</Button>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+                {profile?.stripe_customer_id ? "Funding Vector Active" : "No Funding Vector Stored"}
+              </p>
+              <Button 
+                variant="link" 
+                onClick={handlePortal}
+                className="text-[#F27D26] text-[10px] font-black uppercase tracking-widest"
+              >
+                {profile?.stripe_customer_id ? "Manage Subscription" : "Initialize Stripe Gateway"}
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -126,17 +245,27 @@ export default function BillingPage() {
                 ))}
               </ul>
             </CardContent>
-            <CardFooter className="pt-8">
+            <CardFooter className="flex flex-col gap-3 pt-8">
               <Button 
                 className={cn(
                   "w-full h-12 rounded-none font-black uppercase text-[10px] tracking-tight transition-all",
                   plan.id === currentPlan ? "bg-white/5 text-white/20 cursor-default" : "bg-white text-black hover:bg-[#F27D26] hover:text-white"
                 )}
                 disabled={plan.id === currentPlan}
-                onClick={() => plan.id !== currentPlan && toast.info(`Initializing ${plan.name} Protocol...`)}
+                onClick={() => plan.id !== currentPlan && handleUpgrade(plan.priceId)}
               >
-                {plan.cta}
+                {plan.id === currentPlan ? plan.cta : `Pay with Card (Stripe)`}
               </Button>
+              {plan.id !== 'free' && plan.id !== currentPlan && (
+                <Button 
+                  variant="outline"
+                  className="w-full h-12 rounded-none font-black uppercase text-[10px] tracking-tight border-white/10 hover:border-[#F27D26] hover:text-[#F27D26] transition-all bg-transparent"
+                  onClick={() => handleJulyPay(plan.id)}
+                >
+                  <Smartphone className="mr-2" size={14} />
+                  Pay with Mobile Money (JulyPay)
+                </Button>
+              )}
             </CardFooter>
           </Card>
         ))}
@@ -166,5 +295,3 @@ export default function BillingPage() {
     </div>
   );
 }
-
-import { cn } from "@/lib/utils";

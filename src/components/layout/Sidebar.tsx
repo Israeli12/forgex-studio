@@ -9,6 +9,7 @@ import {
   PlusCircle, 
   Terminal,
   LogOut,
+  HelpCircle,
   User as UserIcon
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -19,6 +20,7 @@ const NAV_ITEMS = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Projects", href: "/projects", icon: Box },
   { name: "Billing", href: "/billing", icon: CreditCard },
+  { name: "Ops Guide", href: "/guide", icon: HelpCircle },
   { name: "GitHub PAT", href: "/settings/github", icon: Github },
   { name: "API Keys", href: "/settings/api-keys", icon: ShieldCheck },
   { name: "General Settings", href: "/settings", icon: Settings },
@@ -94,9 +96,11 @@ export function Sidebar({ onClose }: SidebarProps) {
 
       <div className="border-t border-white/10 p-6">
         <div className="flex items-center gap-4 px-2">
-          <div className="flex h-8 w-8 items-center justify-center bg-white/5 border border-white/10 text-white/40">
-            <UserIcon size={14} strokeWidth={3} />
-          </div>
+          <Link to="/settings" className="flex items-center gap-4" onClick={onClose}>
+            <div className="flex h-8 w-8 items-center justify-center bg-white/5 border border-white/10 text-white/40 hover:border-[#F27D26]/50 transition-colors">
+              <UserIcon size={14} strokeWidth={3} />
+            </div>
+          </Link>
           <div className="flex-1 overflow-hidden">
             <div className="text-[10px] font-bold uppercase tracking-widest text-white/40">Authorized Operative</div>
             <div className="truncate text-[10px] font-black uppercase tracking-tight opacity-80">{user?.email?.split('@')[0]}</div>

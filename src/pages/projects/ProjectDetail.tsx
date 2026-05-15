@@ -28,6 +28,7 @@ import { Project, Build, Artifact } from "@/types";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { FRAMEWORKS } from "@/lib/constants";
+import { cn } from "@/lib/utils";
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();

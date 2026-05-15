@@ -1,12 +1,14 @@
 import React from "react";
 import { Routes, Route, Navigate, Link, useLocation } from "react-router-dom";
 import { Sidebar } from "@/components/layout/Sidebar";
-import { Bell, Search, Menu, LayoutDashboard, Database, CreditCard, Settings as SettingsIcon } from "lucide-react";
+import { Bell, Search, Menu, LayoutDashboard, Database, CreditCard, HelpCircle, Settings as SettingsIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { AuthProvider, useAuth } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
+import { PLAN_LIMITS } from "@/lib/constants";
 import ProjectsList from "@/pages/projects/ProjectsList";
 import NewProject from "@/pages/projects/NewProject";
 import ProjectDetail from "@/pages/projects/ProjectDetail";
@@ -15,6 +17,8 @@ import BillingPage from "@/pages/billing/BillingPage";
 import GithubSettings from "@/pages/settings/GithubSettings";
 import ApiKeysSettings from "@/pages/settings/ApiKeysSettings";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
+import HowItWorks from "@/pages/guide/HowItWorks";
+import ProfileSettings from "@/pages/settings/ProfileSettings";
 import Login from "@/pages/auth/Login";
 import Signup from "@/pages/auth/Signup";
 
@@ -37,7 +41,7 @@ function FloatingNavbar() {
   const navItems = [
     { icon: LayoutDashboard, href: "/dashboard", label: "Home" },
     { icon: Database, href: "/projects", label: "Nodes" },
-    { icon: CreditCard, href: "/billing", label: "Nexus" },
+    { icon: HelpCircle, href: "/guide", label: "Guide" },
     { icon: SettingsIcon, href: "/settings", label: "Core" },
   ];
 
@@ -125,48 +129,98 @@ function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
-const Dashboard = () => (
-  <div className="space-y-12 md:space-y-16 animate-in fade-in slide-in-from-bottom-4 duration-700">
-    <div className="relative overflow-hidden md:overflow-visible min-h-[120px] md:min-h-[160px]">
-      <h1 className="text-[60px] md:text-[120px] font-black leading-[0.8] tracking-tighter uppercase text-white opacity-20 absolute -top-4 md:-top-12 -left-2 md:-left-4 select-none pointer-events-none whitespace-nowrap">
-        ForgeX<br className="md:hidden" /> Studio
-      </h1>
-      <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6 pt-16 md:pt-0">
-        <div>
-          <h2 className="text-2xl md:text-4xl font-black uppercase tracking-tighter">Command Center</h2>
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#F27D26] mt-2">All Pipelines Operational</p>
+const Dashboard = () => {
+  const [stats, setStats] = React.useState({
+    totalProjects: 0,
+    buildsUsed: 0,
+    buildLimit: 10,
+    storageUsed: 0,
+    tier: 'free'
+  });
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    async function fetchStats() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const [profileRes, projectsRes] = await Promise.all([
+          fetch("/api/user/profile", {
+            headers: { "Authorization": `Bearer ${session?.access_token}` }
+          }),
+          fetch("/api/projects", {
+            headers: { "Authorization": `Bearer ${session?.access_token}` }
+          })
+        ]);
+
+        const profile = await profileRes.json();
+        const projects = await projectsRes.json();
+
+        const tier = profile?.subscription_tier || 'free';
+        setStats({
+          totalProjects: Array.isArray(projects) ? projects.length : 0,
+          buildsUsed: profile?.builds_used || 0,
+          buildLimit: (PLAN_LIMITS as any)[tier].builds_per_month,
+          storageUsed: profile?.storage_used || 0,
+          tier
+        });
+      } catch (err) {
+        console.error("Dashboard stats error:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchStats();
+  }, []);
+
+  return (
+    <div className="space-y-12 md:space-y-16 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="relative overflow-hidden md:overflow-visible min-h-[120px] md:min-h-[160px]">
+        <h1 className="text-[60px] md:text-[120px] font-black leading-[0.8] tracking-tighter uppercase text-white opacity-20 absolute -top-4 md:-top-12 -left-2 md:-left-4 select-none pointer-events-none whitespace-nowrap">
+          ForgeX<br className="md:hidden" /> Studio
+        </h1>
+        <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6 pt-16 md:pt-0">
+          <div>
+            <h2 className="text-2xl md:text-4xl font-black uppercase tracking-tighter">Command Center</h2>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#F27D26] mt-2">All Pipelines Operational</p>
+          </div>
+          <Button asChild className="bg-white text-black font-black uppercase text-[10px] tracking-tight px-6 py-6 rounded-none hover:bg-[#F27D26] hover:text-white transition-all w-fit shadow-xl">
+            <Link to="/projects/new">Initialize New Pipeline</Link>
+          </Button>
         </div>
-        <Button asChild className="bg-white text-black font-black uppercase text-[10px] tracking-tight px-6 py-6 rounded-none hover:bg-[#F27D26] hover:text-white transition-all w-fit shadow-xl">
-          <Link to="/projects/new">Initialize New Pipeline</Link>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4 md:gap-8 pt-8 border-t border-white/10">
+        {[
+          { label: "Total Projects", value: stats.totalProjects.toString(), color: "blue" },
+          { label: "Builds / Mo", value: `${stats.buildsUsed} / ${stats.buildLimit}`, color: "green" },
+          { label: "Egress Used", value: `${(stats.storageUsed / (1024 * 1024)).toFixed(1)} MB`, color: "orange" },
+          { label: "Node Tier", value: stats.tier.toUpperCase(), color: "teal" },
+        ].map((stat) => (
+          <div key={stat.label} className="border border-white/10 bg-[#0A0A0A] p-4 md:p-8 group hover:border-[#F27D26]/50 transition-colors">
+            <div className="text-[8px] md:text-[10px] font-black uppercase tracking-[0.3em] text-white/30 group-hover:text-[#F27D26] transition-colors">{stat.label}</div>
+            <div className="mt-2 md:mt-4 text-xl md:text-4xl font-mono tracking-tighter whitespace-nowrap">{stat.value}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="border border-white/10 bg-[#111] p-8 md:p-12 flex flex-col items-center justify-center text-center space-y-8">
+        <div className="space-y-2">
+          <h3 className="text-xl md:text-2xl font-black uppercase tracking-tighter text-white">
+            {stats.totalProjects > 0 ? "Ready for Execution" : "No Active Deployments"}
+          </h3>
+          <p className="text-[10px] uppercase font-bold tracking-[0.2em] text-white/40">
+            {stats.totalProjects > 0 ? "Access your project nodes to trigger build sequences" : "Connect your source repository to begin the forge process"}
+          </p>
+        </div>
+        <Button asChild variant="outline" className="border-white/10 bg-transparent text-white font-black uppercase text-[10px] tracking-tight px-8 md:px-12 py-6 rounded-none hover:bg-white hover:text-black transition-all">
+          <Link to={stats.totalProjects > 0 ? "/projects" : "/projects/new"}>
+            {stats.totalProjects > 0 ? "View Active Nodes" : "Configure Source"}
+          </Link>
         </Button>
       </div>
     </div>
-
-    <div className="grid grid-cols-2 gap-4 md:grid-cols-4 md:gap-8 pt-8 border-t border-white/10">
-      {[
-        { label: "Total Projects", value: "0", color: "blue" },
-        { label: "Builds / Mo", value: "10 / 10", color: "green" },
-        { label: "Egress Used", value: "0 MB", color: "orange" },
-        { label: "Success Hub", value: "100%", color: "teal" },
-      ].map((stat) => (
-        <div key={stat.label} className="border border-white/10 bg-[#0A0A0A] p-4 md:p-8 group hover:border-[#F27D26]/50 transition-colors">
-          <div className="text-[8px] md:text-[10px] font-black uppercase tracking-[0.3em] text-white/30 group-hover:text-[#F27D26] transition-colors">{stat.label}</div>
-          <div className="mt-2 md:mt-4 text-xl md:text-4xl font-mono tracking-tighter whitespace-nowrap">{stat.value}</div>
-        </div>
-      ))}
-    </div>
-
-    <div className="border border-white/10 bg-[#111] p-8 md:p-12 flex flex-col items-center justify-center text-center space-y-8">
-      <div className="space-y-2">
-        <h3 className="text-xl md:text-2xl font-black uppercase tracking-tighter text-white">No Active Deployments</h3>
-        <p className="text-[10px] uppercase font-bold tracking-[0.2em] text-white/40">Connect your source repository to begin the forge process</p>
-      </div>
-      <Button asChild variant="outline" className="border-white/10 bg-transparent text-white font-black uppercase text-[10px] tracking-tight px-8 md:px-12 py-6 rounded-none hover:bg-white hover:text-black transition-all">
-        <Link to="/projects/new">Configure Source</Link>
-      </Button>
-    </div>
-  </div>
-);
+  );
+};
 
 export default function App() {
   return (
@@ -182,7 +236,8 @@ export default function App() {
         <Route path="/projects/:id" element={<ProtectedRoute><Layout><ProjectDetail /></Layout></ProtectedRoute>} />
         <Route path="/projects/:id/builds/:buildId" element={<ProtectedRoute><Layout><BuildDetail /></Layout></ProtectedRoute>} />
         <Route path="/billing" element={<ProtectedRoute><Layout><BillingPage /></Layout></ProtectedRoute>} />
-        <Route path="/settings" element={<ProtectedRoute><Layout><div>General Settings (Profile, Notifications)</div></Layout></ProtectedRoute>} />
+        <Route path="/guide" element={<ProtectedRoute><Layout><HowItWorks /></Layout></ProtectedRoute>} />
+        <Route path="/settings" element={<ProtectedRoute><Layout><ProfileSettings /></Layout></ProtectedRoute>} />
         <Route path="/settings/github" element={<ProtectedRoute><Layout><GithubSettings /></Layout></ProtectedRoute>} />
         <Route path="/settings/api-keys" element={<ProtectedRoute><Layout><ApiKeysSettings /></Layout></ProtectedRoute>} />
         
